@@ -262,22 +262,43 @@ which is what `server.py` does (disabled by default, can be enabled for Linux + 
 
 ## Enabling GPU Acceleration (Linux + NVIDIA GPU)
 
-Edit `server.py`, find the `get_model()` function, and change the flags:
+Acceleration is controlled entirely via environment variables — no code edits needed.
+Set them in `.env` (or `docker-compose.yml` environment block):
 
-```python
-_model = AutoModel(
-    model_dir=str(MODEL_DIR),
-    load_jit=False,
-    load_trt=True,    # ← TensorRT (~4x faster, requires tensorrt-cu12 ≥ 10.x)
-    load_vllm=True,   # ← vLLM LLM accelerator (requires vLLM 0.11+)
-    fp16=True,        # ← FP16 inference (requires CUDA)
-)
-```
+| Variable | Default | Description |
+|---|---|---|
+| `LOAD_FP16` | `false` | FP16 inference — requires CUDA; halves VRAM usage |
+| `LOAD_VLLM` | `false` | vLLM internal LLM accelerator — requires vLLM 0.11+ installed separately |
+| `LOAD_TRT` | `false` | TensorRT — requires `tensorrt-cu12 ≥ 10.x`, Linux only, ~4× faster |
+| `LOAD_JIT` | `false` | TorchScript JIT — works on any platform, modest speedup |
 
-Install vLLM (in the venv) if using `load_vllm=True`:
+### Recommended combinations
 
 ```bash
+# Full GPU stack (best throughput)
+LOAD_FP16=true
+LOAD_VLLM=true
+LOAD_TRT=true
+
+# GPU without TensorRT (simpler setup)
+LOAD_FP16=true
+LOAD_VLLM=true
+
+# CPU / portability (default — no extra installs needed)
+# leave all at false
+```
+
+### Installing vLLM (when `LOAD_VLLM=true`)
+
+vLLM is not in `requirements.txt` because it conflicts with CosyVoice's pinned `torch==2.3.1`.
+Install it manually after the rest of the environment is set up:
+
+```bash
+# venv
 .venv/bin/pip install vllm==0.11.0
+
+# Docker: add to Dockerfile before the CMD line, or install at runtime:
+docker exec cosyvoice3-api pip install vllm==0.11.0
 ```
 
 ---
