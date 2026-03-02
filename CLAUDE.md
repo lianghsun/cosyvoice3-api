@@ -106,16 +106,44 @@ cosyvoice3-api/
 
 ## Environment Variables (`.env`)
 
+### Paths & Storage
+
 | Variable       | Required | Default                        | Description                        |
 |----------------|----------|--------------------------------|------------------------------------|
 | `MODEL_DIR`    | No       | `./models/Fun-CosyVoice3-0.5B` | Path to downloaded model weights   |
-| `HF_TOKEN`     | For upload | —                            | HuggingFace write token            |
-| `HF_REPO_ID`   | For upload | —                            | e.g. `username/tts-outputs`        |
-| `HF_REPO_TYPE` | No       | `dataset`                      | `dataset` or `model`               |
-| `HOST`         | No       | `0.0.0.0`                      | Server bind address                |
-| `PORT`         | No       | `8000`                         | Server port                        |
 | `VOICES_DIR`   | No       | `./voices`                     | Where to store voice seed files    |
 | `OUTPUT_DIR`   | No       | `./outputs`                    | Where to store generated WAVs      |
+
+### HuggingFace Upload
+
+| Variable       | Required   | Default    | Description                              |
+|----------------|------------|------------|------------------------------------------|
+| `HF_TOKEN`     | For upload | —          | HuggingFace write token                  |
+| `HF_REPO_ID`   | For upload | —          | Destination repo, e.g. `user/tts-outputs`|
+| `HF_REPO_TYPE` | No         | `dataset`  | `dataset` or `model`                     |
+
+### Server
+
+| Variable       | Required | Default   | Description                    |
+|----------------|----------|-----------|--------------------------------|
+| `HOST`         | No       | `0.0.0.0` | API server bind address        |
+| `PORT`         | No       | `8000`    | API server port                |
+| `GRADIO_PORT`  | No       | `7860`    | Gradio UI port                 |
+| `API_URL`      | No       | `http://localhost:8000` | URL Gradio uses to reach the API (inside Docker: `http://api:8000`) |
+
+### Model Acceleration (Linux + NVIDIA GPU only)
+
+All default to `false` for portability. Set to `"true"` to enable.
+
+| Variable    | Default | Requires                        | Effect                                 |
+|-------------|---------|---------------------------------|----------------------------------------|
+| `LOAD_FP16` | `false` | CUDA                            | FP16 inference; halves VRAM usage      |
+| `LOAD_VLLM` | `false` | vLLM 0.11+ installed separately | Accelerates the LLM speech-token step  |
+| `LOAD_TRT`  | `false` | tensorrt-cu12 ≥ 10.x, Linux    | TensorRT for flow model (~4× faster)   |
+| `LOAD_JIT`  | `false` | None                            | TorchScript JIT; modest speedup        |
+
+> **Note:** `LOAD_VLLM=true` requires manually installing vLLM (`pip install vllm==0.11.0`)
+> after the main environment is set up, because vLLM conflicts with CosyVoice's pinned `torch==2.3.1`.
 
 ---
 
