@@ -53,6 +53,12 @@ HF_TOKEN     = os.getenv("HF_TOKEN", "")
 HF_REPO_ID   = os.getenv("HF_REPO_ID", "")
 HF_REPO_TYPE = os.getenv("HF_REPO_TYPE", "dataset")
 
+# ── model acceleration flags (all off by default; enable on Linux + GPU) ─────
+LOAD_FP16  = os.getenv("LOAD_FP16",  "false").lower() == "true"
+LOAD_VLLM  = os.getenv("LOAD_VLLM",  "false").lower() == "true"
+LOAD_TRT   = os.getenv("LOAD_TRT",   "false").lower() == "true"
+LOAD_JIT   = os.getenv("LOAD_JIT",   "false").lower() == "true"
+
 # ── logging ──────────────────────────────────────────────────────────────────
 logging.basicConfig(
     level=logging.INFO,
@@ -85,12 +91,16 @@ async def get_model():
         logger.info("Loading CosyVoice3 model from %s …", MODEL_DIR)
         try:
             from cosyvoice.cli.cosyvoice import AutoModel  # type: ignore
+            logger.info(
+                "Acceleration flags — fp16=%s vllm=%s trt=%s jit=%s",
+                LOAD_FP16, LOAD_VLLM, LOAD_TRT, LOAD_JIT,
+            )
             _model = AutoModel(
                 model_dir=str(MODEL_DIR),
-                load_jit=False,
-                load_trt=False,
-                load_vllm=False,
-                fp16=False,
+                load_jit=LOAD_JIT,
+                load_trt=LOAD_TRT,
+                load_vllm=LOAD_VLLM,
+                fp16=LOAD_FP16,
             )
             logger.info("Model loaded. Sample rate: %d Hz", _model.sample_rate)
         except Exception as exc:
