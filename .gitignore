@@ -1,0 +1,23 @@
+# virtual environment
+.venv/
+
+# model weights (large files)
+models/
+
+# runtime data
+voices/
+outputs/
+
+# secrets
+.env
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+
+# macOS
+.DS_Store

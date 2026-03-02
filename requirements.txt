@@ -1,0 +1,9 @@
+# cozyvoice3-api wrapper layer requirements
+# CosyVoice's own dependencies are installed by setup.sh from CosyVoice/requirements.txt
+
+fastapi>=0.115.0
+uvicorn[standard]>=0.30.0
+python-multipart>=0.0.9
+huggingface_hub>=0.27.0
+python-dotenv>=1.0.0
+aiofiles>=23.0.0
