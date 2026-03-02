@@ -62,13 +62,15 @@ cosyvoice3-api/
 ├── CLAUDE.md                ← this file
 ├── README.md                ← user-facing documentation
 ├── setup.sh                 ← bootstrap script (venv + CosyVoice clone + deps + model download)
-├── server.py                ← FastAPI application
-├── requirements.txt         ← wrapper-layer Python deps (not CosyVoice's own requirements)
+├── server.py                ← FastAPI application (with async job queue)
+├── gradio_app.py            ← Gradio web UI (polls FastAPI, plays audio)
+├── requirements.txt         ← wrapper-layer Python deps
 ├── .env.example             ← environment variable template
 ├── .gitignore
-├── Dockerfile               ← PyTorch 2.3.1 + CUDA 12.1 image; CosyVoice cloned at build time
-├── docker-compose.yml       ← GPU service + model-downloader (profile: download)
-├── docker-compose.cpu.yml   ← CPU-only override (removes GPU reservation)
+├── Dockerfile               ← PyTorch 2.3.1 + CUDA 12.1; CosyVoice cloned at build time
+├── Dockerfile.gradio        ← python:3.11-slim + gradio + requests (no GPU)
+├── docker-compose.yml       ← api (GPU) + gradio + model-downloader (profile: download)
+├── docker-compose.cpu.yml   ← CPU-only override
 ├── .dockerignore
 │
 ├── .venv/               ← created by setup.sh (gitignored)
@@ -82,16 +84,23 @@ cosyvoice3-api/
 
 ## API Surface
 
-| Method | Path                  | Description                                           |
-|--------|-----------------------|-------------------------------------------------------|
-| GET    | `/health`             | Server status, model load state, HF upload config     |
-| POST   | `/voices`             | Upload voice seed (audio + optional transcript)       |
-| GET    | `/voices`             | List all stored voice seeds                           |
-| DELETE | `/voices/{name}`      | Delete a voice seed                                   |
-| POST   | `/tts/zero-shot`      | Synthesize speech; optionally upload WAV to HF Hub   |
+| Method | Path                  | Description                                                      |
+|--------|-----------------------|------------------------------------------------------------------|
+| GET    | `/health`             | Server status, model load state, HF upload config, queue depth   |
+| POST   | `/voices`             | Upload voice seed (audio + optional transcript)                  |
+| GET    | `/voices`             | List all stored voice seeds                                      |
+| DELETE | `/voices/{name}`      | Delete a voice seed                                              |
+| POST   | `/tts/zero-shot`      | Enqueue TTS job → returns `job_id` + `queue_depth` immediately   |
+| GET    | `/jobs/{job_id}`      | Poll job status (`queued/processing/done/failed`) + result URL   |
+| GET    | `/jobs`               | List recent jobs (most recent first, limit param)                |
+| GET    | `/audio/{filename}`   | Download a generated WAV file                                    |
 
-All TTS requests use **zero-shot voice cloning** (`inference_zero_shot`).
-Streaming output (`stream=true`) is supported but response is still buffered for simplicity.
+## Job Queue Design
+
+- `POST /tts/zero-shot` validates input and pushes to an `asyncio.Queue`, returns immediately
+- A single background coroutine (`_worker`) processes one job at a time (GPU-safe)
+- In-memory `_jobs` dict holds all job state (survives request lifecycle, lost on restart)
+- Clients poll `GET /jobs/{job_id}` every ~2 s; Gradio handles this automatically
 
 ---
 

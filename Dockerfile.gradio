@@ -1,0 +1,19 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Dockerfile.gradio — lightweight Gradio web UI
+# No GPU needed; just Python + gradio + requests.
+# ─────────────────────────────────────────────────────────────────────────────
+FROM python:3.11-slim
+
+WORKDIR /app
+
+RUN pip install --no-cache-dir gradio requests
+
+COPY gradio_app.py /app/gradio_app.py
+
+ENV GRADIO_HOST=0.0.0.0 \
+    GRADIO_PORT=7860 \
+    API_URL=http://api:8000
+
+EXPOSE 7860
+
+CMD ["python", "gradio_app.py"]

@@ -4,15 +4,20 @@
 # Prerequisites:
 #   - Docker Engine ≥ 24 with NVIDIA Container Toolkit installed
 #     https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html
-#   - Model weights at ./models/Fun-CosyVoice3-0.5B  (run the model-downloader service
-#     or use setup.sh to download them first)
+#   - Model weights at ./models/Fun-CosyVoice3-0.5B
+#     → run: docker compose --profile download up model-downloader
 #   - Copy .env.example → .env and fill in your values
 #
 # Usage:
-#   docker compose up -d                    # start the API server
-#   docker compose logs -f api              # tail logs
-#   docker compose --profile download up    # download model weights first
-#   docker compose down                     # stop
+#   docker compose --profile download up model-downloader  # one-time model download
+#   docker compose up -d                                   # start API + Gradio UI
+#   docker compose logs -f api                             # tail API logs
+#   docker compose logs -f gradio                         # tail UI logs
+#   docker compose down                                    # stop everything
+#
+# Ports:
+#   API:    http://host:8000        (REST + Swagger UI at /docs)
+#   Gradio: http://host:7860        (Web UI)
 # ─────────────────────────────────────────────────────────────────────────────
 
 services:
@@ -53,7 +58,6 @@ services:
               count: 1           # set to "all" to use all available GPUs
               capabilities: [gpu]
 
-    # give the model time to load before declaring unhealthy
     healthcheck:
       test: ["CMD", "python", "-c",
              "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
@@ -68,15 +72,42 @@ services:
         max-size: "50m"
         max-file: "5"
 
-  # ── one-shot model downloader (run with: docker compose --profile download up) ─
+  # ── Gradio web UI ─────────────────────────────────────────────────────────────
+  gradio:
+    build:
+      context: .
+      dockerfile: Dockerfile.gradio
+    image: cosyvoice3-gradio:latest
+    container_name: cosyvoice3-gradio
+    restart: unless-stopped
+
+    ports:
+      - "${GRADIO_PORT:-7860}:7860"
+
+    environment:
+      API_URL: "http://api:8000"       # internal Docker network hostname
+      GRADIO_HOST: "0.0.0.0"
+      GRADIO_PORT: "7860"
+
+    depends_on:
+      api:
+        condition: service_healthy
+
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "3"
+
+  # ── one-shot model downloader ─────────────────────────────────────────────────
   model-downloader:
     image: python:3.11-slim
     container_name: cosyvoice3-model-downloader
     profiles: [download]
 
     environment:
-      HF_TOKEN: "${HF_TOKEN:-}"          # optional — public model, no token needed
-      HF_HUB_ENABLE_HF_TRANSFER: "1"    # faster downloads via hf_transfer
+      HF_TOKEN: "${HF_TOKEN:-}"
+      HF_HUB_ENABLE_HF_TRANSFER: "1"
 
     volumes:
       - ./models:/models

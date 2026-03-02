@@ -13,8 +13,10 @@ Generated audio can be automatically uploaded to a **HuggingFace Hub** dataset o
 ## Features
 
 - Zero-shot voice cloning via REST API
+- **Async job queue** — requests enqueued immediately, single GPU worker processes sequentially (no OOM crashes under concurrent load)
 - Voice seed management (upload, list, delete)
 - Optional automatic upload of generated audio to HuggingFace Hub
+- **Gradio web UI** — upload seeds, synthesize speech, play audio in-browser (runs as a separate lightweight container)
 - Fully isolated Python virtual environment (no system Python pollution)
 - Platform-aware setup (skips Linux-only GPU packages on macOS)
 
@@ -129,7 +131,7 @@ curl -X DELETE http://localhost:8000/voices/alice
 ---
 
 ### `POST /tts/zero-shot`
-Synthesize speech using zero-shot voice cloning.
+Enqueue a TTS synthesis job. Returns immediately with a `job_id`.
 
 **Form fields:**
 
@@ -138,25 +140,34 @@ Synthesize speech using zero-shot voice cloning.
 | `text` | string | ✅ | Text to synthesize |
 | `voice_name` | string | ✅ | Name of a previously uploaded voice seed |
 | `upload_to_hf` | bool | No | Upload generated WAV to HuggingFace Hub (default: `false`) |
-| `stream` | bool | No | Use streaming inference internally (default: `false`) |
-
-Returns the generated audio as `audio/wav`.
-Response headers include `X-Generated-File`, `X-Sample-Rate`, and (if uploaded) `X-HF-URL`.
 
 ```bash
-# Synthesize and save locally
 curl -X POST http://localhost:8000/tts/zero-shot \
-  -F "text=Hello, this is a test of zero-shot voice cloning." \
-  -F "voice_name=alice" \
-  --output result.wav
+  -F "text=Hello, this is a test." \
+  -F "voice_name=alice"
+# → {"job_id": "abc123...", "status": "queued", "queue_depth": 1}
+```
 
-# Synthesize and upload to HuggingFace
-curl -X POST http://localhost:8000/tts/zero-shot \
-  -F "text=Hello world!" \
-  -F "voice_name=alice" \
-  -F "upload_to_hf=true" \
-  --output result.wav \
-  --dump-header -  # shows X-HF-URL in response headers
+---
+
+### `GET /jobs/{job_id}`
+Poll job status. When `status` is `done`, the response includes `audio_url`.
+
+```bash
+curl http://localhost:8000/jobs/abc123...
+# queued    → {"status": "queued", ...}
+# processing→ {"status": "processing", ...}
+# done      → {"status": "done", "audio_url": "/audio/alice_....wav", "hf_url": "..."}
+# failed    → {"status": "failed", "error": "..."}
+```
+
+---
+
+### `GET /audio/{filename}`
+Download a generated WAV file.
+
+```bash
+curl http://localhost:8000/audio/alice_20240101T120000Z_abc123.wav --output result.wav
 ```
 
 ---
@@ -236,15 +247,20 @@ This saves the weights to `./models/Fun-CosyVoice3-0.5B/` which is bind-mounted 
 ### Step 3 — Build and start
 
 ```bash
-# GPU mode (default)
+# GPU mode (default) — starts API server + Gradio UI
 docker compose up -d
 
 # Tail logs
-docker compose logs -f api
+docker compose logs -f api     # inference worker
+docker compose logs -f gradio  # web UI
 
 # Stop
 docker compose down
 ```
+
+Services:
+- **API** → `http://your-server:8000` (REST + Swagger UI at `/docs`)
+- **Gradio UI** → `http://your-server:7860` (web interface)
 
 ### CPU-only mode (no NVIDIA GPU)
 
@@ -256,9 +272,10 @@ docker compose -f docker-compose.yml -f docker-compose.cpu.yml up -d
 
 | File | Purpose |
 |---|---|
-| `Dockerfile` | Image definition (PyTorch 2.3.1 + CUDA 12.1, installs CosyVoice) |
-| `docker-compose.yml` | GPU service + optional model-downloader |
-| `docker-compose.cpu.yml` | CPU-only override (removes GPU reservation) |
+| `Dockerfile` | API image (PyTorch 2.3.1 + CUDA 12.1, installs CosyVoice) |
+| `Dockerfile.gradio` | Gradio image (python:3.11-slim, no GPU) |
+| `docker-compose.yml` | `api` + `gradio` services + model-downloader |
+| `docker-compose.cpu.yml` | CPU-only override |
 | `.dockerignore` | Excludes models/, .venv/, CosyVoice/ from build context |
 
 > **Note on worker count:** The container runs a single Uvicorn worker intentionally.
