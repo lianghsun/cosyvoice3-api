@@ -1,0 +1,19 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# cosyvoice3-api  docker-compose.cpu.yml  (CPU-only override)
+#
+# Use this when no NVIDIA GPU / Container Toolkit is available (e.g. local dev,
+# CI environments, or testing on macOS via Docker Desktop).
+#
+# Inference will be significantly slower than GPU mode.
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.cpu.yml up -d
+# ─────────────────────────────────────────────────────────────────────────────
+
+services:
+  api:
+    # override: remove GPU reservation entirely
+    deploy:
+      resources:
+        reservations:
+          devices: []

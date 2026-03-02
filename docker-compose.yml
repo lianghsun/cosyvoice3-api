@@ -1,0 +1,104 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# cosyvoice3-api  docker-compose.yml  (GPU — default)
+#
+# Prerequisites:
+#   - Docker Engine ≥ 24 with NVIDIA Container Toolkit installed
+#     https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html
+#   - Model weights at ./models/Fun-CosyVoice3-0.5B  (run the model-downloader service
+#     or use setup.sh to download them first)
+#   - Copy .env.example → .env and fill in your values
+#
+# Usage:
+#   docker compose up -d                    # start the API server
+#   docker compose logs -f api              # tail logs
+#   docker compose --profile download up    # download model weights first
+#   docker compose down                     # stop
+# ─────────────────────────────────────────────────────────────────────────────
+
+services:
+
+  # ── main API server ──────────────────────────────────────────────────────────
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: cosyvoice3-api:latest
+    container_name: cosyvoice3-api
+    restart: unless-stopped
+
+    ports:
+      - "${PORT:-8000}:8000"
+
+    env_file:
+      - .env
+
+    environment:
+      MODEL_DIR: /app/models/Fun-CosyVoice3-0.5B
+      VOICES_DIR: /app/voices
+      OUTPUT_DIR: /app/outputs
+
+    volumes:
+      # model weights — bind-mount from host (too large to bake into image)
+      - ./models:/app/models
+      # voice seeds and generated audio — named volumes for persistence
+      - voices_data:/app/voices
+      - outputs_data:/app/outputs
+
+    # NVIDIA GPU access (requires NVIDIA Container Toolkit)
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1           # set to "all" to use all available GPUs
+              capabilities: [gpu]
+
+    # give the model time to load before declaring unhealthy
+    healthcheck:
+      test: ["CMD", "python", "-c",
+             "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      start_period: 120s
+      retries: 3
+
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+
+  # ── one-shot model downloader (run with: docker compose --profile download up) ─
+  model-downloader:
+    image: python:3.11-slim
+    container_name: cosyvoice3-model-downloader
+    profiles: [download]
+
+    environment:
+      HF_TOKEN: "${HF_TOKEN:-}"          # optional — public model, no token needed
+      HF_HUB_ENABLE_HF_TRANSFER: "1"    # faster downloads via hf_transfer
+
+    volumes:
+      - ./models:/models
+
+    command: >
+      bash -c "
+        pip install --quiet huggingface_hub hf_transfer &&
+        python -c \"
+import os
+from huggingface_hub import snapshot_download
+snapshot_download(
+    repo_id='FunAudioLLM/Fun-CosyVoice3-0.5B-2512',
+    local_dir='/models/Fun-CosyVoice3-0.5B',
+    ignore_patterns=['*.git*'],
+    token=os.getenv('HF_TOKEN') or None,
+)
+print('Model downloaded to /models/Fun-CosyVoice3-0.5B')
+        \"
+      "
+
+volumes:
+  voices_data:
+    driver: local
+  outputs_data:
+    driver: local

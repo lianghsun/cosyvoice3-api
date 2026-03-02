@@ -205,7 +205,68 @@ Install vLLM (in the venv) if using `load_vllm=True`:
 
 ---
 
-## Production Deployment
+## Docker Deployment (Recommended for Production)
+
+### Prerequisites
+
+- Docker Engine ≥ 24
+- [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html) (for GPU support)
+
+### Step 1 — Configure environment
+
+```bash
+cp .env.example .env
+# fill in HF_TOKEN, HF_REPO_ID, etc.
+```
+
+### Step 2 — Download model weights
+
+The model is too large to bake into the Docker image (~9.75 GB). Download it first:
+
+```bash
+# Using the bundled docker-compose downloader service:
+docker compose --profile download up model-downloader
+
+# Or using setup.sh outside Docker (requires Python 3.10+):
+bash setup.sh --skip-model-download   # installs deps but skips server start
+```
+
+This saves the weights to `./models/Fun-CosyVoice3-0.5B/` which is bind-mounted into the container.
+
+### Step 3 — Build and start
+
+```bash
+# GPU mode (default)
+docker compose up -d
+
+# Tail logs
+docker compose logs -f api
+
+# Stop
+docker compose down
+```
+
+### CPU-only mode (no NVIDIA GPU)
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.cpu.yml up -d
+```
+
+### Files
+
+| File | Purpose |
+|---|---|
+| `Dockerfile` | Image definition (PyTorch 2.3.1 + CUDA 12.1, installs CosyVoice) |
+| `docker-compose.yml` | GPU service + optional model-downloader |
+| `docker-compose.cpu.yml` | CPU-only override (removes GPU reservation) |
+| `.dockerignore` | Excludes models/, .venv/, CosyVoice/ from build context |
+
+> **Note on worker count:** The container runs a single Uvicorn worker intentionally.
+> Multiple workers would each load the full model into VRAM (~6–8 GB), quickly exhausting GPU memory.
+
+---
+
+## Bare-metal / venv Deployment
 
 Use a single Uvicorn worker (to avoid loading the model multiple times into VRAM):
 

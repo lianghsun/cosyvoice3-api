@@ -59,19 +59,23 @@ Model repo: `FunAudioLLM/Fun-CosyVoice3-0.5B-2512` on HuggingFace
 
 ```
 cosyvoice3-api/
-├── CLAUDE.md            ← this file
-├── README.md            ← user-facing documentation
-├── setup.sh             ← bootstrap script (venv + CosyVoice clone + deps + model download)
-├── server.py            ← FastAPI application
-├── requirements.txt     ← wrapper-layer Python deps (not CosyVoice's own requirements)
-├── .env.example         ← environment variable template
+├── CLAUDE.md                ← this file
+├── README.md                ← user-facing documentation
+├── setup.sh                 ← bootstrap script (venv + CosyVoice clone + deps + model download)
+├── server.py                ← FastAPI application
+├── requirements.txt         ← wrapper-layer Python deps (not CosyVoice's own requirements)
+├── .env.example             ← environment variable template
 ├── .gitignore
+├── Dockerfile               ← PyTorch 2.3.1 + CUDA 12.1 image; CosyVoice cloned at build time
+├── docker-compose.yml       ← GPU service + model-downloader (profile: download)
+├── docker-compose.cpu.yml   ← CPU-only override (removes GPU reservation)
+├── .dockerignore
 │
 ├── .venv/               ← created by setup.sh (gitignored)
-├── CosyVoice/           ← cloned by setup.sh (gitignored — added later if needed)
-├── models/              ← model weights downloaded by setup.sh (gitignored)
-├── voices/              ← uploaded voice seeds at runtime (gitignored)
-└── outputs/             ← generated WAV files at runtime (gitignored)
+├── CosyVoice/           ← cloned by setup.sh or in Docker build (gitignored locally)
+├── models/              ← model weights; bind-mounted into Docker container (gitignored)
+├── voices/              ← uploaded voice seeds at runtime; named Docker volume (gitignored)
+└── outputs/             ← generated WAV files at runtime; named Docker volume (gitignored)
 ```
 
 ---
@@ -142,5 +146,4 @@ python server.py
 - [ ] Add `POST /tts/cross-lingual` endpoint
 - [ ] Add request queue / concurrency limiter (model is not thread-safe under concurrent load)
 - [ ] Add auth (API key header) for production use
-- [ ] Docker / docker-compose deployment config
 - [ ] GitHub Actions CI for linting
